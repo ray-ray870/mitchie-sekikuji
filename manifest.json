@@ -1,0 +1,13 @@
+{
+  "name": "みっちーの席くじ",
+  "short_name": "席くじ",
+  "start_url": "座席抽選.html",
+  "display": "standalone",
+  "background_color": "#faf6ef",
+  "theme_color": "#5b3d8a",
+  "icons": [
+    { "src": "icon.png", "sizes": "780x788", "type": "image/png" },
+    { "src": "icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}
