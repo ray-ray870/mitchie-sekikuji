@@ -1,0 +1,11 @@
+{
+  "name": "mitchie-sekikuji",
+  "private": true,
+  "description": "みっちーの席くじ🎲 - 自動テスト用設定（アプリ本体は index.html 単体で完結しています）",
+  "scripts": {
+    "test": "node tests/smoke-test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0"
+  }
+}
