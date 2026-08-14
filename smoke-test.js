@@ -198,6 +198,15 @@ test('机の人数固定: 空席指定/解除/ドラッグ40回 (4机x2席、参
     const overlay = document.querySelector('.modal-overlay');
     if (overlay) document.body.removeChild(overlay);
   }
+  // jsdomのバージョンによって window.PointerEvent がコンストラクタとして
+  // 使えたり使えなかったりするため、常に動く素の Event + 手動プロパティ付与
+  // という方式でポインターイベントを合成する（アプリ側は ev.clientX / ev.pointerId /
+  // ev.pointerType をプロパティとして読むだけなので、これで十分再現できる）。
+  function makePointerEvent(type, props) {
+    const ev = new window.Event(type, { bubbles: true });
+    Object.keys(props).forEach((k) => { try { ev[k] = props[k]; } catch (e) { /* ignore */ } });
+    return ev;
+  }
   function dragBetweenRandomDesks() {
     T.render();
     const cushions = Array.from(document.querySelectorAll('.cushion'));
@@ -206,11 +215,11 @@ test('机の人数固定: 空席指定/解除/ドラッグ40回 (4机x2席、参
     const src = cushions[Math.floor(Math.random() * cushions.length)];
     const target = blocks[Math.floor(Math.random() * blocks.length)];
     document.elementFromPoint = function () { return target; };
-    src.dispatchEvent(new window.PointerEvent('pointerdown', { clientX: 100, clientY: 100, pointerId: 1, pointerType: 'mouse', bubbles: true }));
+    src.dispatchEvent(makePointerEvent('pointerdown', { clientX: 100, clientY: 100, pointerId: 1, pointerType: 'mouse' }));
     for (let i = 0; i < 5; i++) {
-      src.dispatchEvent(new window.PointerEvent('pointermove', { clientX: 100 + i * 20, clientY: 100, pointerId: 1, pointerType: 'mouse', bubbles: true }));
+      src.dispatchEvent(makePointerEvent('pointermove', { clientX: 100 + i * 20, clientY: 100, pointerId: 1, pointerType: 'mouse' }));
     }
-    src.dispatchEvent(new window.PointerEvent('pointerup', { clientX: 200, clientY: 100, pointerId: 1, pointerType: 'mouse', bubbles: true }));
+    src.dispatchEvent(makePointerEvent('pointerup', { clientX: 200, clientY: 100, pointerId: 1, pointerType: 'mouse' }));
   }
 
   for (let round = 0; round < 40; round++) {
