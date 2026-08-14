@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
-const INDEX_HTML_PATH = path.join(__dirname, '..', 'index.html');
+const INDEX_HTML_PATH = path.join(__dirname, 'index.html');
 
 let totalTests = 0;
 let failedTests = 0;
