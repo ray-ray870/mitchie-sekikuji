@@ -1,7 +1,7 @@
 // みっちーの席くじ - オフライン対応用 Service Worker
 // アプリを更新した時は CACHE_NAME の末尾の数字を1つ増やしてください
 // (増やさないと、ユーザーのスマホに古いキャッシュが残り続けてしまいます)
-const CACHE_NAME = 'mitchie-seat-lottery-v12';
+const CACHE_NAME = 'mitchie-seat-lottery-v13';
 
 const CORE_ASSETS = [
   './',
