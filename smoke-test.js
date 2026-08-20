@@ -50,7 +50,10 @@ function loadAppSource() {
     incrementRowSeatCount: incrementRowSeatCount, decrementRowSeatCount: decrementRowSeatCount,
     setTableCount: setTableCount, applyDeskSeatCounts: applyDeskSeatCounts,
     totalPhysicalSeatCount: totalPhysicalSeatCount, distributeSeats: distributeSeats,
-    autoFillRowSeats: autoFillRowSeats
+    autoFillRowSeats: autoFillRowSeats,
+    saveNamed: saveNamed, listNamedSaves: listNamedSaves, deleteNamedSave: deleteNamedSave,
+    applyNamedSave: applyNamedSave, buildSetupSnapshot: buildSetupSnapshot,
+    buildResultSnapshot: buildResultSnapshot
   };
 })();
 `;
@@ -371,6 +374,137 @@ test('Undo履歴が空のときは何も起きず安全にfalseを返す', (T) =
   T.buildTables();
   const ok = T.undoLayout();
   assert(ok === false, '履歴が無いのにtrueが返りました');
+});
+
+/* ============================================================
+ * 7. 名前を付けて保存（設定 / 座席結果）
+ * ========================================================== */
+console.log('\n=== 7. 名前を付けて保存 ===');
+
+test('設定を名前を付けて保存 -> 一覧に出る -> 開くと復元される', (T, window) => {
+  window.localStorage.clear();
+  T.state.eventType = 'dining';
+  T.state.shape = 'square';
+  T.state.tableCount = 2;
+  T.state.totalParticipants = 8;
+  T.state.seatCounts = [4, 4];
+  T.buildTables();
+  const seat1 = T.findSeatByNum(1);
+  seat1.fixedName = 'ゆい';
+  const ok = T.saveNamed('setup', '文化祭2026');
+  assert(ok === true, 'saveNamedがfalseを返しました');
+
+  const list = T.listNamedSaves('setup');
+  assert(list.length === 1, `一覧の件数が違います: ${list.length}`);
+  assert(list[0].name === '文化祭2026（設定）', `保存名に(設定)が付いていません: ${list[0].name}`);
+
+  // 別の状態に変えてから、保存した内容を開いて復元されるか確認
+  T.state.tableCount = 1;
+  T.state.totalParticipants = 2;
+  T.state.seatCounts = [2];
+  T.buildTables();
+  T.applyNamedSave('setup', list[0].data);
+  assert(T.state.tables.length === 2, `復元後のテーブル数が違います: ${T.state.tables.length}`);
+  assert(T.state.step === 'layout', `復元後のstepが違います: ${T.state.step}`);
+  const restoredSeat1 = T.findSeatByNum(1);
+  assert(restoredSeat1.fixedName === 'ゆい', '固定名が復元されていません');
+});
+
+test('座席結果を名前を付けて保存 -> 開くと参加者の名前ごと復元される', (T, window) => {
+  window.localStorage.clear();
+  T.state.eventType = 'dining';
+  T.state.shape = 'circle';
+  T.state.tableCount = 1;
+  T.state.totalParticipants = 4;
+  T.state.seatCounts = [4];
+  T.buildTables();
+  const names = ['あ', 'か', 'さ', 'た'];
+  T.state.tables[0].seats.forEach((s, i) => { s.name = names[i]; });
+  T.state.participants = T.state.tables[0].seats.map((s, i) => (
+    { id: 'x' + i, name: names[i], fixed: false, assigned: true, seatNum: s.num }
+  ));
+  T.saveNamed('result', '運動会2026');
+
+  const list = T.listNamedSaves('result');
+  assert(list.length === 1, `一覧の件数が違います: ${list.length}`);
+  assert(list[0].name === '運動会2026（座席結果）', `保存名に(座席結果)が付いていません: ${list[0].name}`);
+
+  T.state.step = 'setup';
+  T.applyNamedSave('result', list[0].data);
+  assert(T.state.step === 'result', `復元後のstepがresultになっていません: ${T.state.step}`);
+  const restoredNames = T.state.tables[0].seats.map((s) => s.name);
+  assert(JSON.stringify(restoredNames) === JSON.stringify(names), `復元後の名前が違います: ${restoredNames}`);
+});
+
+test('保存は20件を超えると古いものから切り捨てられる', (T, window) => {
+  window.localStorage.clear();
+  T.state.eventType = 'dining';
+  T.state.tableCount = 1;
+  T.state.totalParticipants = 4;
+  T.state.seatCounts = [4];
+  T.buildTables();
+  for (let i = 1; i <= 25; i++) {
+    T.saveNamed('setup', `保存${i}`);
+  }
+  const list = T.listNamedSaves('setup');
+  assert(list.length === 20, `20件に切り詰められていません: ${list.length}`);
+  assert(list[0].name === '保存25（設定）', `最新が先頭に来ていません: ${list[0].name}`);
+});
+
+test('保存を削除すると一覧から消える', (T, window) => {
+  window.localStorage.clear();
+  T.state.eventType = 'dining';
+  T.state.tableCount = 1;
+  T.state.totalParticipants = 4;
+  T.state.seatCounts = [4];
+  T.buildTables();
+  T.saveNamed('setup', '削除テスト');
+  const before = T.listNamedSaves('setup');
+  assert(before.length === 1, '保存直後の件数が違います');
+  T.deleteNamedSave('setup', before[0].id);
+  const after = T.listNamedSaves('setup');
+  assert(after.length === 0, `削除後も残っています: ${after.length}`);
+});
+
+test('食事会・講演会それぞれの保存が、種別指定なしで横断して一覧に出る', (T, window) => {
+  window.localStorage.clear();
+  T.state.eventType = 'dining';
+  T.state.shape = 'square';
+  T.state.tableCount = 1;
+  T.state.totalParticipants = 4;
+  T.state.seatCounts = [4];
+  T.buildTables();
+  T.saveNamed('setup', '食事会テスト');
+
+  T.state.eventType = 'lecture';
+  T.state.lectureStyle = 'row';
+  T.state.shape = 'lecture';
+  T.state.tableCount = 1;
+  T.state.totalParticipants = 4;
+  T.state.seatCounts = [4];
+  T.buildTables();
+  T.saveNamed('setup', '講演会テスト');
+
+  const combined = T.listNamedSaves('setup'); // eventType未指定 = 横断一覧
+  assert(combined.length === 2, `横断一覧の件数が違います: ${combined.length}`);
+  const names = combined.map((item) => item.name).sort();
+  assert(
+    JSON.stringify(names) === JSON.stringify(['講演会テスト（設定）', '食事会テスト（設定）']),
+    `横断一覧の中身が違います: ${names}`
+  );
+});
+
+test('壊れた保存データ（data欠落）でも復元処理が例外を投げない', (T) => {
+  T.state.eventType = 'dining';
+  T.state.tableCount = 1;
+  T.state.totalParticipants = 4;
+  T.state.seatCounts = [4];
+  T.buildTables();
+  let threw = false;
+  try {
+    T.applyNamedSave('setup', { tables: null });
+  } catch (e) { threw = true; }
+  assert(!threw, 'applyNamedSaveが壊れたデータで例外を投げました（try/catchで捕捉されるべき）');
 });
 
 /* ============================================================
