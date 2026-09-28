@@ -2713,7 +2713,9 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
   }
 
   function shareApp(){
-    var url = location.href;
+    // 共有するURLはいつも同じにする（index.html付き・?付きなどバラバラだと、
+    // LINEなどが別のページとして扱い、共有画像が出ないことがあるため）。
+    var url = 'https://ray-ray870.github.io/mitchie-sekikuji/';
     var title = 'みっちーの席くじ🎲';
     var text = '席順をワンタップで決められる、みっちーの席くじ🎲というアプリです。飲み会・食事会にどうぞ🐧';
     if(navigator.share){
