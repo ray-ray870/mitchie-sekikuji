@@ -152,6 +152,19 @@
     margin-top:22px; display:inline-flex; padding:4px 13px; border-radius:999px;
     background:rgba(139,123,164,.08); color:#a89bbd; font-size:10px; font-weight:700; letter-spacing:.03em;
   }
+  /* トップ画面のアップデート情報（ほんのり目立つ薄い黄色）。
+     まだ見ていない新しいバージョンがあるときだけ赤い点を出す。 */
+  .update-pill{
+    margin-top:18px; display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:999px;
+    background:#fffcf1; color:#a8894a; font-size:12px; font-weight:800;
+    border:1.5px solid #f6ecd0; box-shadow:0 3px 10px rgba(242,182,50,.08);
+  }
+  .update-dot{width:7px; height:7px; border-radius:50%; background:var(--coral); flex-shrink:0;}
+  .update-list{max-height:55vh; overflow-y:auto; text-align:left; margin-top:4px;}
+  .update-item{border-top:1px solid var(--purple-soft); padding:10px 0;}
+  .update-item-head{display:flex; gap:8px; align-items:baseline; font-size:13px; font-weight:900; color:var(--purple-deep);}
+  .update-item-date{font-size:11px; color:#a89bbd; font-weight:700;}
+  .update-item ul{margin:4px 0 0; padding-left:1.2em; font-size:12.5px; line-height:1.7; color:var(--ink);}
   .start-credit{
     margin-top:9px; font-size:10px; color:#c3bad2; line-height:1.9;
   }
@@ -2721,6 +2734,56 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     return wrap;
   }
   /* ================= RENDER: START ================= */
+  /* ================= アップデート情報 =================
+     新しい版を出したら、いちばん上に1件足す（新しい順）。
+     番号の決め方：大きな作り直し→左、機能の追加→真ん中、不具合の修正だけ→右 を1つ上げる。 */
+  var APP_UPDATES = [
+    { version:'1.1.0', date:'2026.9.28', items:[
+      '講演会に「スクリーン」を追加',
+      '隣同士グループを改善',
+      '共有したときに画像が出るように',
+      '不具合の修正'
+    ]},
+    { version:'1.0.0', date:'2026.8.11', items:['最初の公開'] }
+  ];
+  var UPDATE_SEEN_KEY = 'mitchie-seat-lottery-seen-version';
+  function hasUnseenUpdate(){
+    try{ return appStorage.getItem(UPDATE_SEEN_KEY) !== APP_UPDATES[0].version; }catch(e){ return false; }
+  }
+  function markUpdateSeen(){
+    try{ appStorage.setItem(UPDATE_SEEN_KEY, APP_UPDATES[0].version); }catch(e){}
+  }
+  function openUpdatesModal(){
+    markUpdateSeen();
+    var dot = document.querySelector('.update-dot');
+    if(dot && dot.parentNode) dot.parentNode.removeChild(dot);
+    var overlay = el('div','modal-overlay');
+    var box = el('div','modal-box');
+    box.appendChild(el('div','modal-title','🆕 アップデート情報'));
+    var list = el('div','update-list');
+    APP_UPDATES.forEach(function(u){
+      var item = el('div','update-item');
+      var head = el('div','update-item-head');
+      head.appendChild(el('span',null,'Ver '+u.version));
+      head.appendChild(el('span','update-item-date',u.date));
+      item.appendChild(head);
+      var ul = el('ul');
+      u.items.forEach(function(t){ ul.appendChild(el('li',null,t)); });
+      item.appendChild(ul);
+      list.appendChild(item);
+    });
+    box.appendChild(list);
+    var actions = el('div','modal-actions');
+    actions.style.marginTop = '14px';
+    var closeBtn = el('button','modal-cancel','閉じる');
+    closeBtn.type = 'button';
+    closeBtn.onclick = function(){ document.body.removeChild(overlay); };
+    actions.appendChild(closeBtn);
+    box.appendChild(actions);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+
   function renderStart(){
     app.innerHTML='';
     app.appendChild(renderTopbar(false));
@@ -2785,6 +2848,12 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     var shareBtn = el('button','share-btn','📣 このアプリをおすすめする');
     shareBtn.onclick = function(){ shareApp(); };
     wrap.appendChild(shareBtn);
+    var updateBtn = el('button','update-pill');
+    updateBtn.type = 'button';
+    if(hasUnseenUpdate()) updateBtn.appendChild(el('span','update-dot'));
+    updateBtn.appendChild(el('span',null,'✨ Ver '+APP_UPDATES[0].version+' にアップデートしました ›'));
+    updateBtn.onclick = function(){ openUpdatesModal(); };
+    wrap.appendChild(updateBtn);
     wrap.appendChild(el('div','unofficial-badge','【非公式】'));
     var credit = el('div','start-credit');
     credit.appendChild(el('div',null,'©The Path to Rebirth / Mitchie'));
