@@ -2362,6 +2362,31 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     return Infinity;
   }
 
+  // 長テーブル：グループ g（size人）がテーブルの1辺に横並びで座れるか。
+  // 座れないとき（1辺の席数が足りない・固定席で途切れる等）は、隣でなくても
+  // 「同じテーブル」に座らせる。判断は固定席だけで行う（くじの途中経過に左右されない）。
+  function squareSideFits(g, size){
+    var fixedSet = {}, fixedCount = 0;
+    state.tables.forEach(function(tbl){
+      tbl.seats.forEach(function(x){ if(x.fixedName && g.indexOf(x.fixedName) !== -1){ fixedSet[x.num] = true; fixedCount++; } });
+    });
+    function usable(x){ return fixedSet[x.num] || (x.num <= state.totalParticipants && !x.fixedName); }
+    return getAdjacencyChains().some(function(chain){
+      var seats = chain.seats, n = seats.length;
+      if(size > n) return false;
+      for(var start=0; start<=n-size; start++){
+        var ok = true, inWin = 0;
+        for(var k=0; k<size; k++){
+          var x = seats[start+k];
+          if(!usable(x)){ ok = false; break; }
+          if(fixedSet[x.num]) inWin++;
+        }
+        if(ok && inWin === fixedCount) return true;
+      }
+      return false;
+    });
+  }
+
   // taken: { 席番号: 名前 } … まだ確定していないが「ここに座った」とみなす席
   function seatOccupant(seat, taken, fixedOnly){
     if(taken && taken[seat.num]) return taken[seat.num];
@@ -2403,10 +2428,18 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       if(seatedNums.length + pendingNames.length < 2) return;
       var job = { group:g, seatedNums:seatedNums, pendingNames:pendingNames, size: seatedNums.length + pendingNames.length };
       if(isDeskStyle) job.spanK = deskSpanNeeded(g, job.size);
+      if(state.shape === 'square') job.tableMode = !squareSideFits(g, job.size);
       jobs.push(job);
     });
     // 大きいグループ・すでに座っている仲間が多いグループほど置き場所が限られるので先に決める
-    jobs.sort(function(a,b){ return (b.size - a.size) || (b.seatedNums.length - a.seatedNums.length); });
+    // ただし「同じテーブルならどこでもよい」グループ（長テーブルで1辺に並びきらない）は
+    // 席の選び方に縛りがないので最後に回し、隣同士が必要なグループの席を先に確保する。
+    function sortJobs(){
+      jobs.sort(function(a,b){
+        return ((a.tableMode?1:0) - (b.tableMode?1:0)) || (b.size - a.size) || (b.seatedNums.length - a.seatedNums.length);
+      });
+    }
+    sortJobs();
 
     var reserved = {};
     var picks = [];
@@ -2419,6 +2452,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       var seatedSet = {};
       job.seatedNums.forEach(function(n){ seatedSet[n] = true; });
       if(isDeskStyle && job.spanK > 1) return deskRunCandidates(job, seatedSet);
+      if(job.tableMode) return sameTableCandidates(job, seatedSet);
       chains.forEach(function(chain){
         var seats = chain.seats, n = seats.length;
         var hits = 0;
@@ -2458,6 +2492,20 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       });
       return shuffle(out);
     }
+    // 長テーブルで1辺に並びきらないグループ用：同じテーブルの空いている席から選ぶ候補。
+    // このグループは最後に決めるので、席の組み合わせは問わない（テーブルごとに1候補）。
+    function sameTableCandidates(job, seatedSet){
+      var out = [], need = job.pendingNames.length;
+      state.tables.forEach(function(tbl){
+        var hits = 0;
+        tbl.seats.forEach(function(x){ if(seatedSet[x.num]) hits++; });
+        if(hits !== job.seatedNums.length) return; // 座っている仲間が全員このテーブルにいないと無理
+        var free = tbl.seats.filter(isFree);
+        if(free.length < need) return;
+        out.push(shuffle(free).slice(0, need));
+      });
+      return shuffle(out);
+    }
     function solve(i){
       if(++steps > 20000) return false;
       if(i >= jobs.length) return true;
@@ -2470,8 +2518,23 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       }
       return false;
     }
-    if(!solve(0)) return { ok:false };
-    return { ok:true, jobs:jobs, picks:picks };
+    var solved = solve(0), relaxedCount = 0;
+    // 長テーブル：全グループを辺に並べられないときは、大きいグループから順に
+    // 「同じテーブルならどこでもよい」に切り替えてもう一度探す。
+    // （1辺に並べる人数でも、ほかのグループと辺を取り合って並べないことがあるため）
+    if(!solved && state.shape === 'square'){
+      var relax = jobs.filter(function(j){ return !j.tableMode; })
+                      .sort(function(a,b){ return b.size - a.size; });
+      for(var ri=0; ri<relax.length && !solved; ri++){
+        relax[ri].tableMode = true;
+        relaxedCount++;
+        sortJobs();
+        reserved = {}; picks = []; steps = 0;
+        solved = solve(0);
+      }
+    }
+    if(!solved) return { ok:false };
+    return { ok:true, jobs:jobs, picks:picks, relaxed:relaxedCount };
   }
   // 設定時点（座席レイアウト画面）で、隣同士グループが全員隣り合って座れるかを調べる。
   // 戻り値: { ok, badGroups: [単独でも無理なグループ...], combined: 単独ならOKだが全部同時は無理 }
@@ -2493,7 +2556,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
   }
   function adjacencyUnitName(){
     if(state.eventType === 'lecture') return state.lectureStyle === 'desk' ? '机（入りきらない場合は前後に並んだ机）' : '列（通路と通路の間）';
-    return state.shape === 'square' ? 'テーブルの1辺' : 'テーブル';
+    return 'テーブル';
   }
   function pairGroupWarningText(res){
     if(res.combined){
@@ -2553,13 +2616,32 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       }
       return null;
     }
-    if(planPairGroups({}, null).ok){
-      var order = shuffle(availableSeats);
+    // 長テーブルで隣に仲間がいないとき、同じテーブルにいる仲間の名前
+    function mateSameTable(num){
+      if(!myGroup || state.shape !== 'square') return null;
+      var mySeat = findSeatByNum(num), myTbl = mySeat && findTableForSeat(mySeat);
+      if(!myTbl) return null;
+      for(var i=0;i<myTbl.seats.length;i++){
+        var o = myTbl.seats[i].fixedName || myTbl.seats[i].name;
+        if(o && o !== name && myGroup.indexOf(o) !== -1) return o;
+      }
+      return null;
+    }
+    var base = planPairGroups({}, null);
+    if(base.ok){
+      // 長テーブルでは、今より「辺で隣同士」にできるグループが減らない席を優先する
+      // （グループ外の人が座ったせいで、隣同士にできた仲間が同じテーブル止まりにならないように）
+      var order = shuffle(availableSeats), fallback = null;
       for(var i=0;i<order.length;i++){
         var t = {}; t[order[i]] = name;
-        if(planPairGroups(t, null).ok){
-          return { seatNum: order[i], mateName: mateNextTo(order[i]) };
-        }
+        var pl = planPairGroups(t, null);
+        if(!pl.ok) continue;
+        if(pl.relaxed > base.relaxed){ if(fallback === null) fallback = order[i]; continue; }
+        fallback = order[i]; break;
+      }
+      if(fallback !== null){
+        var mn = mateNextTo(fallback);
+        return { seatNum: fallback, mateName: mn, tableMateName: mn ? null : mateSameTable(fallback) };
       }
     }
     // 計画が立たない（席が足りない等）ときは、以前と同じく「仲間の隣が空いていればそこ」
@@ -5040,7 +5122,8 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
         clearInterval(interval);
         numDisplay.textContent = finalSeat;
         numDisplay.classList.add('settled');
-        sub.textContent = isReserved ? ('の席です！（🔗 '+reserved.mateName+'さんの隣）') : 'の席です！';
+        sub.textContent = isReserved ? ('の席です！（🔗 '+reserved.mateName+'さんの隣）')
+          : pick.tableMateName ? ('の席です！（🔗 '+pick.tableMateName+'さんと同じテーブル）') : 'の席です！';
         var babyImg = document.createElement('img');
         babyImg.src = Math.random() < 0.5 ? MITCHIE_BABY_PURPLE : MITCHIE_BABY_PINK;
         babyImg.className = 'lottery-baby-img';
