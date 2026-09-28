@@ -409,6 +409,15 @@
     box-shadow:0 8px 18px rgba(91,61,138,.35); z-index:5;
   }
   .podium-marker.dragging{cursor:grabbing; z-index:60; box-shadow:0 10px 24px rgba(91,61,138,.5);}
+  .screen-marker{
+    position:absolute; width:200px; height:34px; box-sizing:border-box; border-radius:7px;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(150deg,var(--purple-mid),var(--purple-deep)); color:#fff;
+    border:2px solid rgba(255,255,255,.55);
+    font-weight:900; font-size:13px; letter-spacing:.02em; white-space:nowrap; cursor:grab; touch-action:none;
+    box-shadow:0 8px 18px rgba(91,61,138,.35); z-index:4;
+  }
+  .screen-marker.dragging{cursor:grabbing; z-index:60; box-shadow:0 10px 24px rgba(91,61,138,.5);}
   .cushion{
     position:absolute; width:70px; height:70px; border-radius:50%;
     background:var(--purple-mid); color:#fff; font-weight:900; font-size:18px;
@@ -824,7 +833,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     }catch(e){}
   }
 
-  var state = { step:'start', history:[], eventType:'dining', lectureStyle:'row', deskColumns:3, deskSeatsPerTable:4, tableCount:2, totalParticipants:8, shape:'square', seatCounts:[4,4], tables:[], participants:[], fixedModalSeat:null, audioCtx: null, presetNamesText: '', lastAssignedSeatNum: null, podiumOffset:{x:0,y:0}, aisleEvery:0, pairGroups:[], groupPickerOpen:false, groupPickerSelected:[] };
+  var state = { step:'start', history:[], eventType:'dining', lectureStyle:'row', deskColumns:3, deskSeatsPerTable:4, tableCount:2, totalParticipants:8, shape:'square', seatCounts:[4,4], tables:[], participants:[], fixedModalSeat:null, audioCtx: null, presetNamesText: '', lastAssignedSeatNum: null, podiumOffset:{x:0,y:0}, screenOffset:{x:0,y:0}, aisleEvery:0, pairGroups:[], groupPickerOpen:false, groupPickerSelected:[] };
 
   // スマホ(Android)の「戻る」ボタン/ジェスチャー対応。
   // 画面遷移(goTo)ごとに history.pushState でブラウザ履歴に1件積み、
@@ -1438,6 +1447,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       pairGroups: state.pairGroups || [],
       aisleEvery: state.aisleEvery || 0,
       podiumOffset: state.podiumOffset || {x:0,y:0},
+      screenOffset: state.screenOffset || {x:0,y:0},
       tables: state.tables.map(function(tbl){
         var fixedNamesByNum = {};
         tbl.seats.forEach(function(s){ if(s.fixedName) fixedNamesByNum[s.num] = s.fixedName; });
@@ -1664,6 +1674,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     state.tableCount = tables.length;
     if(data.aisleEvery !== undefined) state.aisleEvery = data.aisleEvery || 0;
     if(data.podiumOffset) state.podiumOffset = { x: data.podiumOffset.x || 0, y: data.podiumOffset.y || 0 };
+    if(data.screenOffset) state.screenOffset = { x: data.screenOffset.x || 0, y: data.screenOffset.y || 0 };
     state.layoutHistory = [];
     state.builtSig = layoutParamsSig();
   }
@@ -1917,14 +1928,14 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
   */
   /* ================= レイアウトの「戻す」（Undo） =================
      座席レイアウト画面での操作（ドラッグ移動・固定名の保存/解除・空席にする/
-     空席解除・演台の移動）の直前に、その時点の tables と podiumOffset を
+     空席解除・演台/スクリーンの移動）の直前に、その時点の tables と podiumOffset・screenOffset を
      まるごとスナップショットとして積んでおく。「戻す」ボタンでポップして
      直前の状態に復元する。最大20件まで保持。
   */
   function snapshotLayout(){
     if(!state.layoutHistory) state.layoutHistory = [];
     try{
-      state.layoutHistory.push(JSON.stringify({ tables: state.tables, podiumOffset: state.podiumOffset }));
+      state.layoutHistory.push(JSON.stringify({ tables: state.tables, podiumOffset: state.podiumOffset, screenOffset: state.screenOffset }));
       if(state.layoutHistory.length > 20) state.layoutHistory.shift();
     }catch(e){}
   }
@@ -1935,6 +1946,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       state.tables = snap.tables;
       relinkTableSeats(state.tables);
       state.podiumOffset = snap.podiumOffset;
+      if(snap.screenOffset) state.screenOffset = snap.screenOffset;
       return true;
     }catch(e){ return false; }
   }
@@ -3051,7 +3063,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
           { label:'すべて消して最初から', cls:'modal-delete', onClick: function(){
             showConfirm('名前リスト・グループ・レイアウト・くじ結果をすべて消して、最初からやり直しますか？', function(){
               var prevLen = state.history.length;
-              state = { step:'start', history:[], eventType:'dining', lectureStyle:'row', deskColumns:3, deskSeatsPerTable:4, tableCount:2, totalParticipants:8, shape:'square', seatCounts:[4,4], tables:[], participants:[], fixedModalSeat:null, audioCtx: state.audioCtx, presetNamesText: '', lastAssignedSeatNum: null, podiumOffset:{x:0,y:0}, aisleEvery:0, pairGroups:[], groupPickerOpen:false, groupPickerSelected:[] };
+              state = { step:'start', history:[], eventType:'dining', lectureStyle:'row', deskColumns:3, deskSeatsPerTable:4, tableCount:2, totalParticipants:8, shape:'square', seatCounts:[4,4], tables:[], participants:[], fixedModalSeat:null, audioCtx: state.audioCtx, presetNamesText: '', lastAssignedSeatNum: null, podiumOffset:{x:0,y:0}, screenOffset:{x:0,y:0}, aisleEvery:0, pairGroups:[], groupPickerOpen:false, groupPickerSelected:[] };
               clearAutosave();
               jumpBack('start', [], prevLen);
             });
@@ -3678,6 +3690,9 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     toolbar.appendChild(el('div','hint-text mint','💡 席タップ → 固定/空席の設定'));
     var isTouchDevice = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
     toolbar.appendChild(el('div','hint-text mint', isTouchDevice ? '💡 長押ししてドラッグ → 席を移動' : '💡 ドラッグ → 席を移動'));
+    if(state.eventType === 'lecture'){
+      toolbar.appendChild(el('div','hint-text mint', isTouchDevice ? '💡 演台・スクリーン → そのままドラッグで移動' : '💡 演台・スクリーン → ドラッグで移動'));
+    }
     var undoBtn = el('button','undo-btn','↩️ 一つ前に戻す');
     undoBtn.type = 'button';
     var hasHistory = !!(state.layoutHistory && state.layoutHistory.length);
@@ -3726,7 +3741,8 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       inner.style.setProperty('--desk-cols', state.deskColumns);
     }
     if(state.eventType === 'lecture'){
-      inner.style.paddingTop = '64px';
+      inner.style.paddingTop = STAGE_TOP_SPACE + 'px';
+      inner.appendChild(buildScreen());
       inner.appendChild(buildPodium());
     }
     state.tables.forEach(function(tbl){
@@ -3772,46 +3788,97 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     app.appendChild(wrap);
   }
 
-  // Podium marker for lecture layouts: a simple free-draggable label so the host
-  // can indicate/reposition where the stage or lectern is relative to the seating.
-  function buildPodium(draggable){
+  // 講演会の「演台」と「スクリーン」。どちらも座席とは無関係の目印で、
+  // 位置（podiumOffset / screenOffset）を覚えるだけ。上下左右どこへでも
+  // 自由にドラッグでき、くじ・席番号・隣同士グループには一切影響しない。
+  // 座席の上に STAGE_TOP_SPACE 分の余白を取り、スクリーンを一番奥(上)、
+  // 演台をその手前に置く。
+  var STAGE_TOP_SPACE = 110;
+  function buildStageMarker(cls, label, offsetKey, baseLeft, baseTop, defaultH, draggable){
     if(draggable === undefined) draggable = true;
-    var podium = el('div','podium-marker', draggable ? '🎤 演台' : '🎤 演台');
-    podium.style.left = (150 + state.podiumOffset.x)+'px';
-    podium.style.top = (10 + state.podiumOffset.y)+'px';
-    if(!draggable){
-      podium.style.cursor = 'default';
-      return podium;
+    if(!state[offsetKey]) state[offsetKey] = {x:0, y:0};
+    var marker = el('div', cls, label);
+    // 座席の上の余白（STAGE_TOP_SPACE）の中だけで動かす。座席の方（下）へは
+    // 入れず、上端・左右の端からもはみ出さない。範囲外の位置は範囲内に戻して覚え直す。
+    function place(){
+      var off = state[offsetKey];
+      var h = marker.offsetHeight || defaultH;
+      var w = marker.offsetWidth || 0;
+      var top = baseTop + off.y;
+      var maxTop = STAGE_TOP_SPACE - h - 8;
+      if(top > maxTop) top = maxTop;
+      if(top < 0) top = 0;
+      var left = baseLeft + off.x;
+      // 右端は「座席のいちばん右」まで。画面より横に広い配置（机3列など）でも、
+      // 横にスクロールした先の右端の机の上まで動かせる。
+      var pw = stageRightEdge(marker.parentNode);
+      if(pw && w && left > pw - w) left = pw - w;
+      if(left < 0) left = 0;
+      off.x = left - baseLeft;
+      off.y = top - baseTop;
+      marker.style.left = left+'px';
+      marker.style.top = top+'px';
     }
-    var startX, startY, startOffX, startOffY, moved;
-    podium.addEventListener('pointerdown', function(ev){
+    place();
+    if(!draggable){
+      marker.style.cursor = 'default';
+      return marker;
+    }
+    var startX, startY, startOffX, startOffY;
+    marker.addEventListener('pointerdown', function(ev){
       snapshotLayout();
       ev.preventDefault();
-      try{ podium.setPointerCapture(ev.pointerId); }catch(e){}
+      try{ marker.setPointerCapture(ev.pointerId); }catch(e){}
       startX = ev.clientX; startY = ev.clientY;
-      startOffX = state.podiumOffset.x; startOffY = state.podiumOffset.y;
-      moved = false;
-      podium.classList.add('dragging');
+      startOffX = state[offsetKey].x; startOffY = state[offsetKey].y;
+      var startScroll = getScrollOffsets(), lastX = startX, lastY = startY;
+      marker.classList.add('dragging');
+      // 指の位置＋スクロールした分だけ動かす。画面の端まで来たら席と同じように
+      // 自動でスクロールするので、画面の外にある右端の机の上まで運べる。
+      function apply(){
+        var sc = getScrollOffsets();
+        state[offsetKey].x = startOffX + (lastX - startX) + (sc.x - startScroll.x);
+        state[offsetKey].y = startOffY + (lastY - startY) + (sc.y - startScroll.y);
+        place();
+      }
       function onMove(ev2){
-        var ddx = ev2.clientX - startX, ddy = ev2.clientY - startY;
-        if(Math.abs(ddx)>4 || Math.abs(ddy)>4) moved = true;
-        state.podiumOffset.x = startOffX + ddx;
-        state.podiumOffset.y = startOffY + ddy;
-        podium.style.left = (150 + state.podiumOffset.x)+'px';
-        podium.style.top = (10 + state.podiumOffset.y)+'px';
+        lastX = ev2.clientX; lastY = ev2.clientY;
+        apply();
+        updateAutoScroll(lastX, lastY, apply);
       }
-      function onUp(ev2){
-        try{ podium.releasePointerCapture(ev.pointerId); }catch(e){}
-        podium.classList.remove('dragging');
-        podium.removeEventListener('pointermove', onMove);
-        podium.removeEventListener('pointerup', onUp);
-        podium.removeEventListener('pointercancel', onUp);
+      function onUp(){
+        stopAutoScroll();
+        try{ marker.releasePointerCapture(ev.pointerId); }catch(e){}
+        marker.classList.remove('dragging');
+        marker.removeEventListener('pointermove', onMove);
+        marker.removeEventListener('pointerup', onUp);
+        marker.removeEventListener('pointercancel', onUp);
       }
-      podium.addEventListener('pointermove', onMove);
-      podium.addEventListener('pointerup', onUp);
-      podium.addEventListener('pointercancel', onUp);
+      marker.addEventListener('pointermove', onMove);
+      marker.addEventListener('pointerup', onUp);
+      marker.addEventListener('pointercancel', onUp);
     });
-    return podium;
+    return marker;
+  }
+  // 演台・スクリーンを置ける右端（座席や机のいちばん右、または画面の幅の広い方）。
+  // 演台・スクリーン自身は数えない（数えると右へ動かすほど右端が伸びてしまう）。
+  function stageRightEdge(parent){
+    if(!parent) return 0;
+    var edge = parent.clientWidth || 0;
+    var kids = parent.children;
+    for(var i = 0; i < kids.length; i++){
+      var k = kids[i];
+      if(k.classList.contains('podium-marker') || k.classList.contains('screen-marker')) continue;
+      var r = k.offsetLeft + k.offsetWidth;
+      if(r > edge) edge = r;
+    }
+    return edge;
+  }
+  function buildPodium(draggable){
+    return buildStageMarker('podium-marker', '🎤 演台', 'podiumOffset', 150, 56, 40, draggable);
+  }
+  function buildScreen(draggable){
+    return buildStageMarker('screen-marker', '🖥️ スクリーン', 'screenOffset', 110, 10, 34, draggable);
   }
 
   // Auto-scroll while dragging near any edge of the SCREEN — without this,
@@ -5020,7 +5087,8 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
       inner.style.setProperty('--desk-cols', state.deskColumns);
     }
     if(state.eventType === 'lecture'){
-      inner.style.paddingTop = '64px';
+      inner.style.paddingTop = STAGE_TOP_SPACE + 'px';
+      inner.appendChild(buildScreen(false));
       inner.appendChild(buildPodium(false));
     }
 
@@ -5126,7 +5194,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
         tableCount: state.tableCount, totalParticipants: state.totalParticipants, seatCounts: state.seatCounts,
         presetNamesText: state.presetNamesText || '', pairGroups: state.pairGroups || [],
         tables: state.tables || [], participants: state.participants || [], blankTotal: state.blankTotal,
-        aisleEvery: state.aisleEvery || 0, podiumOffset: state.podiumOffset || {x:0,y:0}, builtSig: state.builtSig || null
+        aisleEvery: state.aisleEvery || 0, podiumOffset: state.podiumOffset || {x:0,y:0}, screenOffset: state.screenOffset || {x:0,y:0}, builtSig: state.builtSig || null
       }));
     }catch(e){}
   }
@@ -5143,7 +5211,7 @@ var MITCHIE_FAMILY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAggAAAFYCAYA
     try{
       ['step','eventType','lectureStyle','shape','deskColumns','deskSeatsPerTable','tableCount',
        'totalParticipants','seatCounts','presetNamesText','pairGroups','participants','blankTotal',
-       'aisleEvery','podiumOffset','builtSig'].forEach(function(k){ if(d[k] !== undefined) state[k] = d[k]; });
+       'aisleEvery','podiumOffset','screenOffset','builtSig'].forEach(function(k){ if(d[k] !== undefined) state[k] = d[k]; });
       state.history = (d.history && d.history.slice) ? d.history.slice() : [];
       state.tables = d.tables || [];
       relinkTableSeats(state.tables);
