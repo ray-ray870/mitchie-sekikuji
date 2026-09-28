@@ -16,8 +16,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Playwright
-        run: npx --yes playwright@1.48.0 install --with-deps chromium
+      - name: Install dependencies
+        run: npm install
 
       - name: Run smoke test
         run: node smoke-test.js
